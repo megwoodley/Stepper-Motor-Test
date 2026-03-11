@@ -1,0 +1,40 @@
+import RPi.GPIO as GPIO
+import time
+ 
+# GPIO pins (BCM mode)
+STEP_PIN = 17
+DIR_PIN = 18
+ENABLE_PIN = 27
+MICROSTEPS = 1  # Set to 16 for 1/16 microstepping on driver
+ 
+# Motor params
+STEPS_PER_REV_MOTOR = 200
+GEAR_MOTOR_TO_OUTPUT = 21 / 64  # Motor revs per output rev
+STEPS_PER_OUTPUT_REV = STEPS_PER_REV_MOTOR / GEAR_MOTOR_TO_OUTPUT  # ~320 steps
+ 
+GPIO.setmode(GPIO.BCM)
+GPIO.setup([STEP_PIN, DIR_PIN, ENABLE_PIN], GPIO.OUT)
+GPIO.output(ENABLE_PIN, GPIO.LOW)  # Enable driver
+ 
+def move_degrees(degrees, speed_delay=0.005):
+    """Move output shaft by degrees (positive CW, negative CCW)."""
+    steps = int(abs(degrees) / 360 * STEPS_PER_OUTPUT_REV * MICROSTEPS)
+    direction = GPIO.HIGH if degrees > 0 else GPIO.LOW
+    GPIO.output(DIR_PIN, direction)
+    for _ in range(steps):
+        GPIO.output(STEP_PIN, GPIO.HIGH)
+        time.sleep(speed_delay)
+        GPIO.output(STEP_PIN, GPIO.LOW)
+        time.sleep(speed_delay)
+ 
+# Sequence: 0 -> 30 -> 0 -> -30 (down to -30? assuming relative)
+print("Starting sequence...")
+move_degrees(30)
+time.sleep(0.5)
+move_degrees(-30)  # Back to 0
+time.sleep(0.5)
+move_degrees(-30)  # To -30 (total -30 from 0)
+ 
+GPIO.output(ENABLE_PIN, GPIO.HIGH)  # Disable
+GPIO.cleanup()
+print("Done.")
