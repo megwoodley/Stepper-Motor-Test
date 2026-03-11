@@ -1,61 +1,30 @@
-# GPIO pins (BCM mode) - sysfs method (no RPi.GPIO library needed)
-STEP_PIN = 17
-DIR_PIN = 18
-ENABLE_PIN = 27
-MICROSTEPS = 1
+import pigpio
+import time
 
-# Motor params
-STEPS_PER_REV_MOTOR = 200
-GEAR_MOTOR_TO_OUTPUT = 21 / 64
-STEPS_PER_OUTPUT_REV = STEPS_PER_REV_MOTOR / GEAR_MOTOR_TO_OUTPUT
+pi = pigpio.pi()  # Connect to pigpiod daemon
+if not pi.connected:
+    exit("pigpiod not running")
 
-# Setup GPIO using sysfs (works on all Pi models)
-def gpio_export(pin):
-    with open(f'/sys/class/gpio/export', 'w') as f:
-        f.write(str(pin))
+DIR = 22
+STEP = 23
+ENABLE = 24
 
-def gpio_direction(pin, direction):
-    with open(f'/sys/class/gpio/gpio{pin}/direction', 'w') as f:
-        f.write(direction)
+pi.set_mode(DIR, pigpio.OUTPUT)
+pi.set_mode(STEP, pigpio.OUTPUT)
+pi.set_mode(ENABLE, pigpio.OUTPUT)
 
-def gpio_write(pin, value):
-    with open(f'/sys/class/gpio/gpio{pin}/value', 'w') as f:
-        f.write(str(value))
+pi.write(ENABLE, 0)  # Enable motor
+pi.write(DIR, 1)     # Clockwise
 
-# Initialize pins
-gpio_export(STEP_PIN)
-gpio_export(DIR_PIN)
-gpio_export(ENABLE_PIN)
-gpio_direction(STEP_PIN, 'out')
-gpio_direction(DIR_PIN, 'out')
-gpio_direction(ENABLE_PIN, 'out')
-gpio_write(ENABLE_PIN, 0)  # Enable driver
+steps = 200
+pulse_width = 500    # Microseconds HIGH (adjust 100-1000)
+delay = 0.005        # Total cycle time ~0.01s/step for 1s runtime
 
-def move_degrees(degrees, speed_delay=0.005):
-    steps = int(abs(degrees) / 360 * STEPS_PER_OUTPUT_REV * MICROSTEPS)
-    direction = 1 if degrees > 0 else 0
-    gpio_write(DIR_PIN, direction)
-    for _ in range(steps):
-        gpio_write(STEP_PIN, 1)
-        time.sleep(speed_delay)
-        gpio_write(STEP_PIN, 0)
-        time.sleep(speed_delay)
+for _ in range(steps):
+    pi.write(STEP, 1)
+    time.sleep(delay / 2)
+    pi.write(STEP, 0)
+    time.sleep(delay / 2)
 
-print("Starting sequence...")
-move_degrees(30)
-time.sleep(0.5)
-move_degrees(-30)
-time.sleep(0.5)
-move_degrees(-30)
-
-gpio_write(ENABLE_PIN, 1)  # Disable driver
-
-# Cleanup
-with open('/sys/class/gpio/unexport', 'w') as f:
-    f.write(str(STEP_PIN))
-with open('/sys/class/gpio/unexport', 'w') as f:
-    f.write(str(DIR_PIN))
-with open('/sys/class/gpio/unexport', 'w') as f:
-    f.write(str(ENABLE_PIN))
-
-print("Done.")
+pi.write(ENABLE, 1)  # Disable
+pi.stop()            # Cleanup
